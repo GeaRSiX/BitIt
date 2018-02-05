@@ -18,6 +18,7 @@
 #define DEBUG	1	//1 = print debug messages to serial
 #define ROUNDS	10	//# game rounds
 #define ACTIONS	2	//# user inputs
+#define SPEED_MS	1500	//MS before user misses an action	//increase this if your finding the game too fast
 
 //=========
 // GLOBALS
