@@ -1,3 +1,4 @@
+.yotta.json
 yotta_modules/
-yotta_target/
+yotta_targets/
 build/
