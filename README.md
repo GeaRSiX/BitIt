@@ -61,7 +61,7 @@ The animations are functions which use the defined images and also have comments
 
 ## Build
 
-The above build instructions are based on the _yotta_ build enviroment.
+The following build instructions are based on the _yotta_ build enviroment.
 1. First set the build target to the BBC micro:bit
 ```bash
 yt target bbc-microbit-classic-gcc
