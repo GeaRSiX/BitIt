@@ -15,60 +15,79 @@
 #include "MicroBit.h"
 #include "img.h"
 // defines
-#define DEBUG	1	//1 = print debug messages to serial
-#define ROUNDS	10	//# game rounds
-#define ACTIONS	2	//# user inputs
-#define SPEED_MS	1500	//MS before user misses an action	//increase this if your finding the game too fast
+#define RESET		-1
+#define SPEED_MS	1500	//MS user is allowed before timeout each round
+#define NUM_INPUTS	6		//# actions user can take
 
 //=========
 // GLOBALS
 //=========
 MicroBit uBit;
-// ACTIONS
-int action[ACTIONS] = {
-	MICROBIT_ID_BUTTON_A,
-	MICROBIT_ID_BUTTON_B
+//STRUCTS
+struct INPUT {
+	int id;				//Message Bus ID
+	int evt;			//Message Bus Event
+	MicroBitImage img;	//Image1 to flash when this INPUT appears
 };
-// ACTION->IMG mapping
-MicroBitImage action_image[ACTIONS][2] = {
-	{IMG_A, IMG_leftarrow},
-	{IMG_B, IMG_rightarrow}
+//VARIABLES
+// list of user actions
+INPUT actions[NUM_INPUTS] = {
+	{ .id = MICROBIT_ID_BUTTON_A, .evt = MICROBIT_EVT_ANY, .img = IMG_A },
+	{ .id = MICROBIT_ID_BUTTON_B, .evt = MICROBIT_EVT_ANY, .img = IMG_B },
+	{ .id = MICROBIT_ID_GESTURE, .evt = MICROBIT_ACCELEROMETER_EVT_TILT_DOWN, .img = IMG_uparrow },
+	{ .id = MICROBIT_ID_GESTURE, .evt = MICROBIT_ACCELEROMETER_EVT_TILT_UP, .img = IMG_downarrow },
+	{ .id = MICROBIT_ID_GESTURE, .evt = MICROBIT_ACCELEROMETER_EVT_TILT_LEFT, .img = IMG_leftarrow },
+	{ .id = MICROBIT_ID_GESTURE, .evt = MICROBIT_ACCELEROMETER_EVT_TILT_RIGHT, .img = IMG_rightarrow }
 };
-// general
-int score = 0;
-int user_action = -1;
-int round_action = -1;
-bool game_over = false;
-bool user_action_open = false;
+//determines whether or not user input is ignored
+bool user_action_window;
+//user score, resets after ever game over
+int score;
+//determines whether or not a game is active
+bool game_over;
+//index of actions[], signals the action the user must perform to score
+int round_action;
+//index of actions[], signals the action user took
+int user_action;
 
 //============
 // PROTOTYPES
 //============
-void read_action(MicroBitEvent evt)
+// if the event registers as one of actions[] log is as user_action, close user_action_window
+void handle_event(MicroBitEvent evt)
 {
-	if (user_action_open)
-	{	
-		// log user action
-		user_action = evt.source;
-		// close action window
-		user_action_open = false;
-	#if DEBUG
-		uBit.serial.printf("READ: %i\r\n", evt.source);
-	#endif
+	for (int a = 0; a < NUM_INPUTS; a++)
+	{
+		// id match & evt match
+		if (actions[a].id == evt.source && actions[a].evt == evt.value)
+			user_action = a;
+		// id match & wildcard evt
+		else if (actions[a].id == evt.source && actions[a].evt == MICROBIT_EVT_ANY)
+			user_action = a;
+		// wildcard id & evt match
+		else if (actions[a].id == MICROBIT_ID_ANY && actions[a].evt == evt.value)
+			user_action = a;
 	}
+
+	user_action_window = false;
 }
-void register_listeners()
+// registers all the uBit listeners (based on actions[])
+void register_listeners(MicroBitMessageBus *uBit)
 {
-	for (int i = 0; i < ACTIONS; i++)
-		uBit.messageBus.listen(action[i], MICROBIT_EVT_ANY, read_action, MESSAGE_BUS_LISTENER_IMMEDIATE);
-//	uBit.messageBus.listen(ACTION_0, MICROBIT_EVT_ANY, read_action, MESSAGE_BUS_LISTENER_IMMEDIATE);
-//	uBit.messageBus.listen(ACTION_1, MICROBIT_EVT_ANY, read_action, MESSAGE_BUS_LISTENER_IMMEDIATE);
+	for (int i = 0; i < NUM_INPUTS; i++)
+		uBit->listen(actions[i].id, actions[i].evt, handle_event, MESSAGE_BUS_LISTENER_IMMEDIATE);
 }
+// displays the start screen animation loop until user takes action[0]
 void start_screen();
-void init_round();
+// displays some text & animations telling the user to GET RDY
 void get_ready();
-void next_action();
-void check_score();
+// initialises a new game round
+void init_round();
+// displays the next action for SPEED ms or until user makes an action
+void display_action();
+// checks if user_action matches round_action
+bool user_scored();
+// prints the current value of score and a rating
 void print_score();
 
 //======
@@ -79,156 +98,149 @@ int main()
 //init
 	uBit.init();
 	uBit.display.setDisplayMode(DISPLAY_MODE_BLACK_AND_WHITE_LIGHT_SENSE);
-	register_listeners();
-#if DEBUG
-	uBit.serial.printf("\r\nSTART-----------------------------------------------------------\r\n");
-#endif
-//----
-
+	register_listeners(&uBit.messageBus);
+	
 //loop
-	while (1)
+	uBit.display.scroll("BitIt!", 75);
+	while(1)
 	{
-		// play start screen until user presses action[0]
-		user_action = -1;
-		while (user_action != action[0])
-		{
-			user_action_open = true;
-			start_screen();
-		}
-		// get ready player
+		start_screen();
 		get_ready();
-		// game loop
+		//reset game
 		score = 0;
 		game_over = false;
-		while (!game_over)
-		{
-			// init new round
-			init_round();
-			// display next action
-			next_action();
-			// check if user_action was correct
-			check_score();
-		}
-		// print final score
+		//game loop
+		do {
+			init_round();		//reset user_input and select random action[]
+			display_action();	//if display_action() exits, the user made an input or was timed-out
+		} while (user_scored());
+		//print final score
 		print_score();
 	}
-//----
 
 //exit
-#if DEBUG
-	uBit.serial.printf("\r\nEND -------------------------------------------------------------\r\n");
-#endif
 	release_fiber();
-//----
 }
 
+//===========
+// FUNCTIONS
+//===========
 void start_screen()
 {
-#if DEBUG
-	uBit.serial.printf("start_screen()\n\r");
-#endif
-	// display start screen animation loop
-	int step = 0;
-	while (user_action_open)
-	{	//note: using a switch to cancel this loop at any point between animations
-		switch (step)
-		{
-			case 0:
-				uBit.display.scroll("START", 75);
-				break;
-			case 1:
-				IMG_animation_square(&uBit, 2, 150, false);
-				break;
-			case 2:
-				IMG_animation_flash(&uBit, IMG_A, IMG_blank, 2, 150);
-				break;
-			case 3:
-				IMG_animation_flash(&uBit, IMG_leftarrow, IMG_blank, 2, 150);
-				break;
-			case 4:
-				IMG_animation_square(&uBit, 2, 150, true);
-				break;
-			case 5:
-				IMG_animation_flash(&uBit, IMG_A, IMG_blank, 2, 100);
-				break;
-			case 6:
-				IMG_animation_flash(&uBit, IMG_leftarrow, IMG_blank, 2, 150);
-				break;;
-			case 7:
-				IMG_animation_square(&uBit, 2, 150, false);
-				step = -1;
-				break;
-		}
-		step++;
-	}
-}
-
-void get_ready()
-{
-#if DEBUG
-	uBit.serial.printf("get_ready()\n\r");
-#endif
-	uBit.display.scroll("GET RDY", 75);
-	IMG_animation_flash(&uBit, IMG_centerdot, IMG_blank, 2, 200);
-}
-
-void init_round()
-{
-	// generate new random seed
-	uBit.seedRandom();
-	// reset user_action
-	user_action = -1;
-	// select a random ACTION_* for the round
-	round_action = uBit.random(ACTIONS);
-	// allow user actions
-	user_action_open = true;
-#if DEBUG
-	uBit.serial.printf("NEW ROUND: a=%i\r\n", round_action);
-#endif
-}
-
-void next_action()
-{
-	// start timer
-	unsigned long timestamp = uBit.systemTime();
-	// display next action (for 1.5secs or until user_action)
-	int step = 0;
-	while (uBit.systemTime() < timestamp + 1500 && user_action == -1)
+	user_action = RESET;	//reset user action
+	//loop until user makes action[0]
+	while (user_action != 0)
 	{
-		if (step == 0)
-		{
-			IMG_animation_flash(&uBit, action_image[round_action][0], IMG_blank, 1, 100);
+		// display start screen animation loop until user input is recieved
+		user_action_window = true;
+		//note: using a switch so the loop can be canceled at any point between animations
+		int step = 0;
+		while (user_action_window)
+		{	switch (step)
+			{
+				case 0:
+					IMG_animation_square(&uBit, 2, 150, false);
+					break;
+				case 1:
+					uBit.display.scroll("START", 75);
+					break;
+				case 2:
+					IMG_animation_flash(&uBit, IMG_A, IMG_blank, 2, 150);
+					break;
+				case 3:
+					IMG_animation_flash(&uBit, IMG_leftarrow, IMG_blank, 2, 150);
+					break;
+				case 4:
+					IMG_animation_square(&uBit, 2, 150, true);
+					break;
+				case 5:
+					IMG_animation_flash(&uBit, IMG_A, IMG_blank, 2, 100);
+					break;
+				case 6:
+					IMG_animation_flash(&uBit, IMG_leftarrow, IMG_blank, 2, 150);
+					break;;
+				case 7:
+					IMG_animation_square(&uBit, 2, 150, false);
+					step = RESET;
+					break;
+			}
 			step++;
-		}
-		else if (step == 1)
-		{
-			IMG_animation_flash(&uBit, action_image[round_action][1], IMG_blank, 1, 100);
-			step--;
 		}
 	}
 	uBit.display.clear();
 }
-
-void check_score()
+void get_ready()
 {
-	if (user_action == action[round_action])
+	uBit.display.scroll("GET RDY", 75);
+	IMG_animation_flash(&uBit, IMG_centerdot, IMG_blank, 3, 150);
+}
+void init_round()
+{
+	// generate a new random seed
+	uBit.seedRandom();
+	// select a random ACTION_* for the round
+	round_action = uBit.random(NUM_INPUTS);
+	// reset user_action
+	user_action = RESET;
+	// open the user action window
+	user_action_window = true;
+}
+void display_action()
+{
+	unsigned long timestamp = uBit.systemTime();
+	// display next action (for 1.5secs or until user_action)
+	while (uBit.systemTime() < timestamp + SPEED_MS && user_action == RESET)
+	{
+		IMG_animation_flash(&uBit, actions[round_action].img, IMG_blank, 1, 100);
+	}
+	uBit.display.clear();
+}
+bool user_scored()
+{
+	if (user_action == round_action)
 	{
 		score++;
 		uBit.display.print(IMG_tick);
+		uBit.sleep(2000);
+		return true;
 	}
 	else
 	{
-		game_over = true;
 		uBit.display.print(IMG_cross);
+		uBit.sleep(2000);
+		return false;
 	}
-	uBit.sleep(2000);
 }
-
 void print_score()
 {
 	IMG_animation_rotation(&uBit, 2, 75, false);
-	uBit.display.scroll("SCORE", 100);
+	uBit.display.scroll("SCORE", 75);
 	uBit.display.print(score);
 	uBit.sleep(2000);
+	switch(score)
+	{
+		case 0:
+		case 1:
+		case 2:
+		case 3:		uBit.display.scroll("NOPE", 75);	break;
+		case 4:
+		case 5:
+		case 6:
+		case 7:		uBit.display.scroll("OK", 75);	break;
+		case 8:
+		case 9:
+		case 10:	uBit.display.scroll("GG", 75);			break;
+		case 11:
+		case 12:
+		case 13:	uBit.display.scroll("NICE", 75);		break;
+		case 14:
+		case 15:
+		case 16:
+		case 17:	uBit.display.scroll("MASTER!!", 75);	break;
+		case 18:
+		case 19:
+		case 20:	uBit.display.scroll("WINNER!!!!", 75);	break;
+		default:	uBit.display.scroll("BEATS ME..", 75);	break;
+	}
 }
 
