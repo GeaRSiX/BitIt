@@ -1,6 +1,6 @@
 {
-  "name": "assignment-1",
-  "version": "0.0.0",
+  "name": "bitit",
+  "version": "1.0.0",
   "description": "Implement a simple game on the BBC Microbit that uses the LED matrix and at least two buttons or other sensors on the device.",
   "author": "Alexander Collins",
   "license": "MIT",
