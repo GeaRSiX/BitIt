@@ -4,11 +4,11 @@
 
 ## Contents
 1. [Overview](#Overview)
-2. [Controls](#Controls)
-3. [Modding](#Modding)
-4. [Animations](#Animations)
-4. [Build](#Build)
-5. [Author](#Author)
+2. [Animations](#Animations)
+3. [Controls](#Controls)
+4. [Modding](#Modding)
+5. [Build](#Build)
+6. [Author](#Author)
 
 ## Overview
 
@@ -17,6 +17,14 @@ All you need to do is the action prompted on the matrix LED display within a cer
 The game continues until you take a wrong action or miss an action.
 **See how high a score you can get!**
 
+## Animations
+
+I found myself writing a lot of animation loops and images for the 5x5 LED matrix, so I put them into img.h.
+
+The images are MicroBitImage objects and all have comments showing exactly what they output.
+The animations are functions which use the defined images and also have comments explaining exactly what they do.
+
+**This img.h header has evolved into it's own project, see [MicroIMG-library](https://github.com/GeaRSiX/MicroIMG-library)
 
 ## Controls
 
@@ -52,12 +60,6 @@ INPUT actions[NUM_INPUTS] = {
 3. DONE! You should also be able to add actions.
 
 **Note: There must be at least 1 action, since actions[0] is used to move past the start screen.**
-
-## Animations
-
-I found myself writing a lot of animation loops and images for the 5x5 LED matrix, so I put them into img.h.
-The images are MicroBitImage objects and all have comments showing exactly what they output.
-The animations are functions which use the defined images and also have comments explaining exactly what they do.
 
 ## Build
 
