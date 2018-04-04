@@ -81,10 +81,10 @@ cp build/bbc-microbit-classic-gcc/src/assignment-1-combined.hex /media/<USER>/MI
 ### Build Enviroment
 One of the following are required to build this project
 
-	| Build Environment | Documentation |
-	| ------------- |-------------|
-	| ARM mbed online | http://lancaster-university.github.io/microbit-docs/online-toolchains/#mbed |
-	| yotta  | http://lancaster-university.github.io/microbit-docs/offline-toolchains/#yotta |
+| Build Environment | Documentation |
+| ------------- |-------------|
+| ARM mbed online | http://lancaster-university.github.io/microbit-docs/online-toolchains/#mbed |
+| yotta  | http://lancaster-university.github.io/microbit-docs/offline-toolchains/#yotta |
 	
 
 ## Author
